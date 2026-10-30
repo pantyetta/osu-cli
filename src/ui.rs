@@ -1,0 +1,202 @@
+use ratatui::{
+    Frame,
+    layout::{Constraint, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Clear, List, Padding, Paragraph, Row, Table, Tabs},
+};
+
+use crate::{App, Mode, Tab, beatmap::OsuMap};
+
+const KEYMAP: &[(&str, &str)] = &[
+    ("/", "Search"),
+    ("?", "Show Help"),
+    ("q / Esc", "Quit"),
+    ("k / ↑", "Select Up"),
+    ("j / ↓", "Select Down"),
+    ("Shift + ↑", "Volume Up"),
+    ("Shift + ↓", "Volume Down"),
+    ("Shift + →", "Next Song"),
+    ("Shift + ←", "Prev Songwn"),
+    ("Space", "Toggle Pause"),
+    ("r", "Toggle Repeat"),
+    ("s", "Toggle Shuffle"),
+    ("Enter", "Play selected"),
+    ("PageUp", "Scroll PageUp"),
+    ("PageDown", "Scroll Pagedown"),
+    ("Home", "Scroll Top"),
+    ("End", "Scroll Last "),
+    ("Tab", "Switch Tabs"),
+];
+
+pub fn draw(frame: &mut Frame, app: &mut App) {
+    let show_search = matches!(app.mode, Mode::Search);
+    let show_playing = !show_search && app.playing().is_some();
+
+    let [tabs_area, main_area, search_area, playing_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Fill(1),
+        Constraint::Length(if show_search { 3 } else { 0 }),
+        Constraint::Length(if show_playing { 3 } else { 0 }),
+    ])
+    .areas(frame.area());
+    app.page_height = main_area.height.saturating_sub(2);
+
+    draw_tabs(frame, tabs_area, app);
+
+    match app.tab {
+        Tab::Maps => draw_maps(frame, main_area, app),
+        Tab::Queue => draw_queue(frame, main_area, app),
+        Tab::History => draw_history(frame, main_area, app),
+    }
+
+    if show_search {
+        draw_search(frame, search_area, app);
+    }
+
+    if show_playing {
+        draw_now_playing(frame, playing_area, app);
+    }
+
+    if matches!(app.mode, Mode::Help) {
+        draw_help(frame);
+    }
+}
+
+fn label(m: &OsuMap) -> String {
+    format!(
+        "{} / {}",
+        m.metadata.display_title(),
+        m.metadata.display_artist()
+    )
+}
+
+fn draw_tabs(frame: &mut Frame, area: Rect, app: &App) {
+    let tabs = Tabs::new(Tab::ALL.map(Tab::title))
+        .select(app.tab as usize)
+        .highlight_style(Style::new().bg(Color::Cyan).add_modifier(Modifier::BOLD));
+    frame.render_widget(tabs, area);
+}
+
+fn draw_maps(frame: &mut Frame, area: Rect, app: &mut App) {
+    let filtered = app.filtered();
+    let header = if app.query.is_empty() {
+        format!("All ({})", filtered.len())
+    } else {
+        format!("Search: {} ({})", app.query, filtered.len())
+    };
+
+    let list = List::new(filtered.iter().map(|&i| {
+        let is_playing = app.playing() == Some(i);
+        let mark = if is_playing { "♪ " } else { "  " };
+        let line = Line::from(format!("{}{}", mark, label(&app.songs[i])));
+        if is_playing {
+            line.style(Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        } else {
+            line
+        }
+    }))
+    .block(
+        Block::bordered()
+            .title(format!(" Maps {} ", header))
+            .title_bottom(Line::from(" ?: help ").right_aligned()),
+    )
+    .highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    frame.render_stateful_widget(list, area, &mut app.map_state);
+}
+
+fn draw_queue(frame: &mut Frame, area: Rect, app: &mut App) {
+    let upcoming = &app.queue[app.upcoming_start()..];
+    let list = List::new(
+        upcoming
+            .iter()
+            .map(|&i| Line::from(format!(" {}", label(&app.songs[i])))),
+    )
+    .block(
+        Block::bordered()
+            .title(format!(" Queue ({}) ", upcoming.len()))
+            .title_bottom(Line::from(" ?: Help ").right_aligned()),
+    )
+    .highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    frame.render_stateful_widget(list, area, &mut app.queue_state);
+}
+
+fn draw_history(frame: &mut Frame, area: Rect, app: &mut App) {
+    let list = List::new(
+        app.history
+            .iter()
+            .rev()
+            .map(|&i| Line::from(format!(" {}", label(&app.songs[i])))),
+    )
+    .block(
+        Block::bordered()
+            .title(format!(" History ({}) ", app.history.len()))
+            .title_bottom(Line::from(" ?: Help ").right_aligned()),
+    )
+    .highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    frame.render_stateful_widget(list, area, &mut app.history_state);
+}
+
+fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
+    frame.render_widget(
+        Paragraph::new(format!("/{}_", app.query)).block(Block::bordered().title(" Search ")),
+        area,
+    );
+}
+
+fn status_span(name: &str, on: bool) -> Span<'_> {
+    let style = if on {
+        Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    } else {
+        Style::new().fg(Color::DarkGray)
+    };
+    Span::styled(name, style)
+}
+
+fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(i) = app.playing() else { return };
+    let Some(audio) = &app.audio else { return };
+
+    let [song_area, status_area] =
+        Layout::horizontal([Constraint::Fill(1), Constraint::Length(14)]).areas(area);
+
+    frame.render_widget(
+        Paragraph::new(format!(
+            " {} {}",
+            if audio.is_puased() { "||" } else { "|>" },
+            label(&app.songs[i])
+        ))
+        .block(Block::bordered().title(" Now Playing ")),
+        song_area,
+    );
+
+    let status = Line::from(vec![
+        status_span("S", app.shuffle),
+        Span::raw(" "),
+        status_span("R", app.repeat),
+        Span::raw(" "),
+        Span::raw(app.volume()),
+    ])
+    .centered();
+
+    frame.render_widget(
+        Paragraph::new(status).block(Block::bordered().title(" Status ")),
+        status_area,
+    );
+}
+
+fn draw_help(frame: &mut Frame) {
+    let rows = KEYMAP.iter().map(|(key, desc)| Row::new([*key, *desc]));
+    let table = Table::new(rows, [Constraint::Length(10), Constraint::Fill(1)]).block(
+        Block::bordered()
+            .title(" Help ")
+            .title_bottom(Line::from(" q / Esc to close help ").right_aligned())
+            .padding(Padding::symmetric(2, 1)),
+    );
+    let popup = frame.area().centered(
+        Constraint::Length(40),
+        Constraint::Length(KEYMAP.len() as u16 + 4),
+    );
+    frame.render_widget(Clear, popup);
+    frame.render_widget(table, popup);
+}

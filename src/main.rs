@@ -210,10 +210,12 @@ impl App {
             return false;
         }
 
-        if self.history.len() >= HISTORY_LIMIT {
-            self.history.pop_front();
+        if self.history.back() != Some(&next) {
+            if self.history.len() >= HISTORY_LIMIT {
+                self.history.pop_front();
+            }
+            self.history.push_back(next);
         }
-        self.history.push_back(next);
         self.pos = Some(pos);
         true
     }

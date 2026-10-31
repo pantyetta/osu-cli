@@ -8,6 +8,7 @@ use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 use crate::beatmap::OsuMap;
 
 const FADE_DURATION: Duration = Duration::from_millis(90);
+const VOLUME_RANGE_DB: f32 = 50.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum AfterFade {
@@ -43,7 +44,7 @@ impl Audio {
         let audio = Self {
             _sink: sink,
             player,
-            volume: 0.05,
+            volume: 0.5,
             gain: 1.0,
             fade: None,
 
@@ -162,7 +163,12 @@ impl Audio {
     }
 
     fn apply_volume(&self) {
-        self.player.set_volume(self.volume * self.gain);
+        let amp = if self.volume < 0.01 {
+            0.0
+        } else {
+            10f32.powf((self.volume - 1.0) * VOLUME_RANGE_DB / 20.0)
+        };
+        self.player.set_volume(amp * self.gain);
     }
 
     pub fn volume(&self) -> f32 {

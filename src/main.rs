@@ -23,8 +23,8 @@ use beatmap::OsuMap;
 mod audio;
 mod beatmap;
 mod library;
-mod ui;
 mod thumbnail;
+mod ui;
 
 const HISTORY_LIMIT: usize = 1_000;
 const QUEUE_LIMIT: usize = 1_000;
@@ -114,7 +114,7 @@ impl App {
             shuffle: false,
             repeat: false,
 
-            thumbnail: Thumbnail::new(picker)
+            thumbnail: Thumbnail::new(picker),
         }
     }
 
@@ -440,7 +440,7 @@ fn main() -> std::io::Result<()> {
         .unwrap_or_else(|| PathBuf::from("./songs"));
 
     let terminal = ratatui::init();
-    let picker= Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+    let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
 
     let mut app = App::new(load(&root), picker);
 

@@ -1,10 +1,14 @@
-use std::{path::{Path, PathBuf}, sync::mpsc::{self, Receiver, Sender}, thread};
+use std::{
+    path::{Path, PathBuf},
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
+};
 
 use image::ImageReader;
 use ratatui::layout::Size;
 use ratatui_image::{FilterType, Resize, picker::Picker, protocol::Protocol};
 
-pub const ROWS: u16 = 3;
+pub const ROWS: u16 = 2;
 
 type Loaded = (usize, Option<Protocol>);
 
@@ -19,7 +23,7 @@ pub struct Thumbnail {
 impl Thumbnail {
     pub fn new(picker: Picker) -> Self {
         let (tx, rx) = mpsc::channel();
-       
+
         Self {
             picker,
             song: None,
@@ -59,13 +63,24 @@ impl Thumbnail {
 }
 
 fn load(path: &Path, picker: &Picker) -> Option<Protocol> {
-    let image = ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?;
+    let image = ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?;
 
     let font = picker.font_size();
     let cols = square_cols(picker);
-    let image = image.resize_to_fill(cols as u32 * font.width as u32, ROWS as u32 * font.height as u32, FilterType::Triangle);
+    let image = image.resize_to_fill(
+        cols as u32 * font.width as u32,
+        ROWS as u32 * font.height as u32,
+        FilterType::Triangle,
+    );
 
-    picker.new_protocol(image, Size::new(cols, ROWS), Resize::Fit(None)).ok()
+    picker
+        .new_protocol(image, Size::new(cols, ROWS), Resize::Fit(None))
+        .ok()
 }
 
 fn square_cols(picker: &Picker) -> u16 {

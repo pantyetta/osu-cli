@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player};
+use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 
 use crate::beatmap::OsuMap;
 
@@ -30,6 +30,8 @@ pub struct Audio {
     volume: f32,
     gain: f32,
     fade: Option<Fade>,
+
+    duration: Option<Duration>,
 }
 
 impl Audio {
@@ -44,6 +46,8 @@ impl Audio {
             volume: 0.05,
             gain: 1.0,
             fade: None,
+
+            duration: None,
         };
         audio.apply_volume();
 
@@ -76,6 +80,7 @@ impl Audio {
                 self.fade = None;
                 self.gain = 1.0;
                 self.apply_volume();
+                self.duration = src.total_duration();
 
                 self.player.clear();
                 self.player.append(src);
@@ -84,6 +89,10 @@ impl Audio {
             }
         }
         false
+    }
+
+    pub fn duration(&self) -> Option<Duration> {
+        self.duration
     }
 
     pub fn toggle_pause(&mut self) {

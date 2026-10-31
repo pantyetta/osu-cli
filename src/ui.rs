@@ -1,9 +1,14 @@
+use std::time::Duration;
+
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
+    layout::{
+        Constraint::{self},
+        Layout, Rect,
+    },
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Clear, List, Padding, Paragraph, Row, Table, Tabs},
+    widgets::{Block, Clear, LineGauge, List, Padding, Paragraph, Row, Table, Tabs},
 };
 use ratatui_image::Image;
 
@@ -35,7 +40,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let show_playing = !show_search && app.playing().is_some();
 
     let show_thumbnail = frame.area().height >= 24 && !matches!(app.mode, Mode::Help);
-    let playing_height = if show_thumbnail { thumbnail::ROWS + 2} else { 3};
+    let playing_height = if show_thumbnail {
+        thumbnail::ROWS + 2
+    } else {
+        4
+    };
 
     let [tabs_area, main_area, search_area, playing_area] = Layout::vertical([
         Constraint::Length(1),
@@ -161,39 +170,49 @@ fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App, show_thumbnail: bo
     let Some(i) = app.playing() else { return };
     let Some(audio) = &app.audio else { return };
 
-    
     let [song_area, status_area] =
-    Layout::horizontal([Constraint::Fill(1), Constraint::Length(14)]).areas(area);
-    
-    
+        Layout::horizontal([Constraint::Fill(1), Constraint::Length(10)]).areas(area);
+
     let song_block = Block::bordered().title(" Now Playing ");
     let song_inner = song_block.inner(song_area);
     frame.render_widget(song_block, song_area);
-    
-    let thumb_width = if show_thumbnail { app.thumbnail.cols() + 1 } else { 0 };
-    let [thumb_area, meta_area] = Layout::horizontal([Constraint::Length(thumb_width), Constraint::Fill(1)]).areas(song_inner);
+
+    let thumb_width = if show_thumbnail {
+        app.thumbnail.cols() + 1
+    } else {
+        0
+    };
+    let [_, thumb_area, meta_area] = Layout::horizontal([
+        Constraint::Length(1),
+        Constraint::Length(thumb_width),
+        Constraint::Fill(1),
+    ])
+    .areas(song_inner);
 
     if show_thumbnail {
         draw_thumbnail(frame, thumb_area, app);
     }
 
+    let [title_area, seek_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(meta_area);
+
     frame.render_widget(
-        Paragraph::new(format!(
-            " {} {}",
-            if audio.is_puased() { "||" } else { "|>" },
-            label(&app.songs[i])
-        )),
-        meta_area,
+        Paragraph::new(format!("{}", label(&app.songs[i]))),
+        title_area,
     );
 
-    let status = Line::from(vec![
-        status_span("S", app.shuffle),
-        Span::raw(" "),
-        status_span("R", app.repeat),
-        Span::raw(" "),
-        Span::raw(app.volume()),
-    ])
-    .centered();
+    draw_seekbar(frame, seek_area, audio.position(), audio.duration());
+
+    let status = vec![
+        Line::from(vec![
+            Span::raw(format!(" {}", if audio.is_puased() { "⏸" } else { "▶" })),
+            Span::raw(" "),
+            status_span("S", app.shuffle),
+            Span::raw(" "),
+            status_span("R", app.repeat),
+        ]),
+        Line::from(vec![Span::raw(format!(" v:{}%", app.volume()))]),
+    ];
 
     frame.render_widget(
         Paragraph::new(status).block(Block::bordered().title(" Status ")),
@@ -221,4 +240,31 @@ fn draw_thumbnail(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(image) = &app.thumbnail.image {
         frame.render_widget(Image::new(image), area);
     }
+}
+
+fn format_time(time: Duration) -> String {
+    let secs = time.as_secs();
+    format!("{:02}:{:02}", secs / 60, secs % 60)
+}
+
+fn draw_seekbar(frame: &mut Frame, area: Rect, position: Duration, duration: Option<Duration>) {
+    let [bar_area, _] =
+        Layout::horizontal([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
+
+    let Some(duration) = duration.filter(|d| !d.is_zero()) else {
+        frame.render_widget(Paragraph::new(format_time(position)), bar_area);
+        return;
+    };
+
+    let ratio = (position.as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0);
+    let gauge = LineGauge::default()
+        .ratio(ratio)
+        .label(format!(
+            "{} / {}",
+            format_time(position),
+            format_time(duration)
+        ))
+        .filled_style(Style::new().fg(Color::Cyan))
+        .unfilled_style(Style::new().fg(Color::DarkGray));
+    frame.render_widget(gauge, bar_area);
 }

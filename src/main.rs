@@ -391,6 +391,11 @@ impl App {
         }
 
         let Some(audio) = &mut self.audio else { return };
+        if audio.is_empty() {
+            self.step = Step::Current;
+            return;
+        }
+
         let at_first = !self.pos.is_some_and(|p| p > 0);
         if at_first || audio.position() > RESTART_THRESHOLD {
             audio.seek(Duration::ZERO);

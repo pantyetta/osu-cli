@@ -49,6 +49,7 @@ enum Tab {
 enum Step {
     Next,
     Prev,
+    Current,
 }
 
 impl Tab {
@@ -147,6 +148,7 @@ impl App {
         let mut target = match self.step {
             Step::Next => self.next_cursor(),
             Step::Prev => self.pos.and_then(|p| p.checked_sub(1)),
+            Step::Current => self.pos,
         };
 
         self.step = Step::Next;
@@ -347,8 +349,14 @@ impl App {
             fastrand::shuffle(&mut ctx[1..]);
         }
 
-        self.queue.extend(ctx);
-        self.play_next();
+        if self.queue.last() == ctx.first() {
+            self.queue.extend_from_slice(&ctx[1..]);
+            self.step = Step::Current;
+            self.with_audio(|a| a.stop());
+        } else {
+            self.queue.extend(ctx);
+            self.play_next();
+        }
     }
 
     fn jump_in_queue(&mut self) {

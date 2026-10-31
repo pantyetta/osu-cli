@@ -24,6 +24,8 @@ const KEYMAP: &[(&str, &str)] = &[
     ("Shift + ↓", "Volume Down"),
     ("Shift + →", "Next Song"),
     ("Shift + ←", "Prev Songwn"),
+    ("→", "Seek +5s"),
+    ("←", "Seek -5s"),
     ("Space", "Toggle Pause"),
     ("r", "Toggle Repeat"),
     ("s", "Toggle Shuffle"),

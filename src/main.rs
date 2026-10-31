@@ -29,6 +29,7 @@ mod ui;
 const HISTORY_LIMIT: usize = 1_000;
 const QUEUE_LIMIT: usize = 1_000;
 const RESTART_THRESHOLD: Duration = Duration::from_secs(3);
+const SEEK_STEP: Duration = Duration::from_secs(5);
 
 #[derive(Debug)]
 enum Mode {
@@ -243,6 +244,9 @@ impl App {
             KeyCode::Left if shift => self.play_prev(),
             KeyCode::Right if shift => self.play_next(),
 
+            KeyCode::Left => self.seek_backward(),
+            KeyCode::Right => self.seek_forward(),
+
             KeyCode::BackTab => self.tab = self.tab.prev(),
             KeyCode::Tab => self.tab = self.tab.next(),
 
@@ -430,6 +434,29 @@ impl App {
             let path = self.songs[i].bg_path();
             self.thumbnail.request(i, path);
         }
+    }
+
+    fn seek_backward(&mut self) {
+        if self.is_fading() {
+            return;
+        }
+
+        self.with_audio(|a| a.seek(a.position().saturating_sub(SEEK_STEP)));
+    }
+
+    fn seek_forward(&mut self) {
+        if self.is_fading() {
+            return;
+        }
+
+        let Some(audio) = &self.audio else { return };
+        let target = audio.position() + SEEK_STEP;
+        if audio.duration().is_some_and(|d| target > d) {
+            self.play_next();
+            return;
+        }
+
+        audio.seek(target);
     }
 }
 

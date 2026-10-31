@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rodio::{DeviceSinkBuilder, Float, MixerDeviceSink, Player};
+use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player};
 
 use crate::beatmap::OsuMap;
 

@@ -14,8 +14,9 @@ use ratatui::{
     },
     widgets::ListState,
 };
+use ratatui_image::picker::Picker;
 
-use crate::library::load;
+use crate::{library::load, thumbnail::Thumbnail};
 use audio::Audio;
 use beatmap::OsuMap;
 
@@ -23,6 +24,7 @@ mod audio;
 mod beatmap;
 mod library;
 mod ui;
+mod thumbnail;
 
 const HISTORY_LIMIT: usize = 1_000;
 const QUEUE_LIMIT: usize = 1_000;
@@ -87,10 +89,12 @@ struct App {
     step: Step,
     shuffle: bool,
     repeat: bool,
+
+    thumbnail: Thumbnail,
 }
 
 impl App {
-    fn new(songs: Vec<OsuMap>) -> Self {
+    fn new(songs: Vec<OsuMap>, picker: Picker) -> Self {
         Self {
             songs,
             audio: Audio::new(),
@@ -109,6 +113,8 @@ impl App {
             step: Step::Next,
             shuffle: false,
             repeat: false,
+
+            thumbnail: Thumbnail::new(picker)
         }
     }
 
@@ -416,6 +422,15 @@ impl App {
             format!("{}", (a.volume() * 100.0).round() as u8)
         })
     }
+
+    fn update_thumbnail(&mut self) {
+        self.thumbnail.poll();
+
+        if let Some(i) = self.playing() {
+            let path = self.songs[i].bg_path();
+            self.thumbnail.request(i, path);
+        }
+    }
 }
 
 fn main() -> std::io::Result<()> {
@@ -423,9 +438,12 @@ fn main() -> std::io::Result<()> {
         .nth(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("./songs"));
-    let mut app = App::new(load(&root));
 
     let terminal = ratatui::init();
+    let picker= Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+
+    let mut app = App::new(load(&root), picker);
+
     let result = run(terminal, &mut app);
     ratatui::restore();
     result
@@ -434,6 +452,7 @@ fn main() -> std::io::Result<()> {
 fn run(mut terminal: DefaultTerminal, app: &mut App) -> std::io::Result<()> {
     loop {
         app.tick();
+        app.update_thumbnail();
         terminal.draw(|frame| ui::draw(frame, app))?;
 
         let timeout = if app.is_fading() {

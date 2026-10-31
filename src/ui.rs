@@ -5,8 +5,9 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Clear, List, Padding, Paragraph, Row, Table, Tabs},
 };
+use ratatui_image::Image;
 
-use crate::{App, Mode, Tab, beatmap::OsuMap};
+use crate::{App, Mode, Tab, beatmap::OsuMap, thumbnail};
 
 const KEYMAP: &[(&str, &str)] = &[
     ("/", "Search"),
@@ -33,11 +34,14 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let show_search = matches!(app.mode, Mode::Search);
     let show_playing = !show_search && app.playing().is_some();
 
+    let show_thumbnail = frame.area().height >= 24 && !matches!(app.mode, Mode::Help);
+    let playing_height = if show_thumbnail { thumbnail::ROWS + 2} else { 3};
+
     let [tabs_area, main_area, search_area, playing_area] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Fill(1),
         Constraint::Length(if show_search { 3 } else { 0 }),
-        Constraint::Length(if show_playing { 3 } else { 0 }),
+        Constraint::Length(if show_playing { playing_height } else { 0 }),
     ])
     .areas(frame.area());
     app.page_height = main_area.height.saturating_sub(2);
@@ -55,7 +59,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
 
     if show_playing {
-        draw_now_playing(frame, playing_area, app);
+        draw_now_playing(frame, playing_area, app, show_thumbnail);
     }
 
     if matches!(app.mode, Mode::Help) {
@@ -153,21 +157,33 @@ fn status_span(name: &str, on: bool) -> Span<'_> {
     Span::styled(name, style)
 }
 
-fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App, show_thumbnail: bool) {
     let Some(i) = app.playing() else { return };
     let Some(audio) = &app.audio else { return };
 
+    
     let [song_area, status_area] =
-        Layout::horizontal([Constraint::Fill(1), Constraint::Length(14)]).areas(area);
+    Layout::horizontal([Constraint::Fill(1), Constraint::Length(14)]).areas(area);
+    
+    
+    let song_block = Block::bordered().title(" Now Playing ");
+    let song_inner = song_block.inner(song_area);
+    frame.render_widget(song_block, song_area);
+    
+    let thumb_width = if show_thumbnail { app.thumbnail.cols() + 1 } else { 0 };
+    let [thumb_area, meta_area] = Layout::horizontal([Constraint::Length(thumb_width), Constraint::Fill(1)]).areas(song_inner);
+
+    if show_thumbnail {
+        draw_thumbnail(frame, thumb_area, app);
+    }
 
     frame.render_widget(
         Paragraph::new(format!(
             " {} {}",
             if audio.is_puased() { "||" } else { "|>" },
             label(&app.songs[i])
-        ))
-        .block(Block::bordered().title(" Now Playing ")),
-        song_area,
+        )),
+        meta_area,
     );
 
     let status = Line::from(vec![
@@ -199,4 +215,10 @@ fn draw_help(frame: &mut Frame) {
     );
     frame.render_widget(Clear, popup);
     frame.render_widget(table, popup);
+}
+
+fn draw_thumbnail(frame: &mut Frame, area: Rect, app: &App) {
+    if let Some(image) = &app.thumbnail.image {
+        frame.render_widget(Image::new(image), area);
+    }
 }

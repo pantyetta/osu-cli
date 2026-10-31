@@ -6,21 +6,12 @@ pub struct OsuMapEvents {
 
 impl OsuMapEvents {
     pub fn new(map: &str) -> Self {
-        let mut bg_filename: Option<String> = None;
-
-        for (i, line) in map.lines().enumerate() {
-            if i == 2 {
-                let bg_settings: Vec<&str> = line.split(',').collect();
-                if bg_settings.len() > 2 {
-                    let mut raw_bg_filepath = bg_settings[2].chars();
-                    raw_bg_filepath.next();
-                    raw_bg_filepath.next_back();
-                    bg_filename = Some(raw_bg_filepath.as_str().to_string());
-                }
-                break;
-            }
-        }
-
+        let bg_filename = map.lines().filter(|line| !line.starts_with("//")).find_map(|line| {
+            let mut fields = line.split(',');
+            let (kind, _, name) = (fields.next()?, fields. next()?, fields.next()?);
+            (kind.trim() == "0").then(|| name.trim().trim_matches('"').to_string())
+        });
+        
         Self { bg_filename }
     }
 }

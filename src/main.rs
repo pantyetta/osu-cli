@@ -22,6 +22,7 @@ use playlist::{Playlist, Step};
 
 mod audio;
 mod beatmap;
+mod config;
 mod library;
 mod playlist;
 mod thumbnail;
@@ -323,11 +324,11 @@ impl App {
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().skip(1).collect();
     let rescan = args.iter().any(|arg| arg == "--rescan");
-    let root = args
-        .iter()
-        .find(|arg| !arg.starts_with("--"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("./songs"));
+
+    let root = match args.iter().find(|arg| !arg.starts_with("--")) {
+        Some(arg) => PathBuf::from(arg),
+        None => config::songs_dir(&config::path()?)?,
+    };
     let cache_path = dirs::cache_dir()
         .unwrap_or_else(env::temp_dir)
         .join("osu-cli")

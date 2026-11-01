@@ -157,17 +157,17 @@ impl App {
 
             KeyCode::Up if shift => self.with_audio(|a| a.add_volume(0.05)),
             KeyCode::Down if shift => self.with_audio(|a| a.add_volume(-0.05)),
-            KeyCode::Left if shift => self.play_prev(),
-            KeyCode::Right if shift => self.play_next(),
+            KeyCode::Left if shift => self.unless_fading(Self::play_prev),
+            KeyCode::Right if shift => self.unless_fading(Self::play_next),
 
-            KeyCode::Left => self.seek_backward(),
-            KeyCode::Right => self.seek_forward(),
+            KeyCode::Left => self.unless_fading(Self::seek_backward),
+            KeyCode::Right => self.unless_fading(Self::seek_forward),
 
             KeyCode::BackTab => self.tab = self.tab.prev(),
             KeyCode::Tab => self.tab = self.tab.next(),
 
             KeyCode::Char('r') => self.playlist.toggle_repeat(),
-            KeyCode::Char('s') => self.toggle_shuffle(),
+            KeyCode::Char('s') => self.unless_fading(|app| app.playlist.toggle_shuffle()),
             KeyCode::Char('k') | KeyCode::Up => self.active_state().select_previous(),
             KeyCode::Char('j') | KeyCode::Down => self.active_state().select_next(),
             KeyCode::Home => self.active_state().select_first(),
@@ -188,8 +188,8 @@ impl App {
             KeyCode::Char('?') => self.mode = Mode::Help,
 
             KeyCode::Enter => match self.tab {
-                Tab::Maps => self.play_from_maps(),
-                Tab::Queue => self.jump_in_queue(),
+                Tab::Maps => self.unless_fading(Self::play_from_maps),
+                Tab::Queue => self.unless_fading(Self::jump_in_queue),
                 _ => {}
             },
             KeyCode::Char(' ') => self.with_audio(|a| a.toggle_pause()),
@@ -233,11 +233,13 @@ impl App {
         }
     }
 
-    fn play_from_maps(&mut self) {
-        if self.is_fading() {
-            return;
+    fn unless_fading(&mut self, action: impl FnOnce(&mut Self)) {
+        if !self.is_fading() {
+            action(self);
         }
+    }
 
+    fn play_from_maps(&mut self) {
         let Some(sel) = self.map_state.selected() else {
             return;
         };
@@ -252,10 +254,6 @@ impl App {
     }
 
     fn jump_in_queue(&mut self) {
-        if self.is_fading() {
-            return;
-        }
-
         let Some(sel) = self.queue_state.selected() else {
             return;
         };
@@ -267,19 +265,11 @@ impl App {
     }
 
     fn play_next(&mut self) {
-        if self.is_fading() {
-            return;
-        }
-
         self.playlist.set_step(Step::Next);
         self.with_audio(|a| a.stop());
     }
 
     fn play_prev(&mut self) {
-        if self.is_fading() {
-            return;
-        }
-
         let Some(audio) = &mut self.audio else { return };
         if audio.is_empty() {
             self.playlist.set_step(Step::Current);
@@ -299,14 +289,6 @@ impl App {
         self.audio.as_ref().is_some_and(Audio::is_fading)
     }
 
-    fn toggle_shuffle(&mut self) {
-        if self.is_fading() {
-            return;
-        }
-
-        self.playlist.toggle_shuffle();
-    }
-
     fn volume(&self) -> String {
         self.audio.as_ref().map_or("---".to_string(), |a| {
             format!("{}", (a.volume() * 100.0).round() as u8)
@@ -323,18 +305,10 @@ impl App {
     }
 
     fn seek_backward(&mut self) {
-        if self.is_fading() {
-            return;
-        }
-
         self.with_audio(|a| a.seek(a.position().saturating_sub(SEEK_STEP)));
     }
 
     fn seek_forward(&mut self) {
-        if self.is_fading() {
-            return;
-        }
-
         let Some(audio) = &self.audio else { return };
         let target = audio.position() + SEEK_STEP;
         if audio.duration().is_some_and(|d| target > d) {
@@ -380,10 +354,11 @@ fn run(mut terminal: DefaultTerminal, app: &mut App) -> std::io::Result<()> {
             continue;
         }
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press && app.handle_key(key) {
-                return Ok(());
-            }
-        };
+        if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+            && app.handle_key(key)
+        {
+            return Ok(());
+        }
     }
 }

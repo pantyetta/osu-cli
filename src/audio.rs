@@ -76,18 +76,18 @@ impl Audio {
     }
 
     pub fn play(&mut self, map: &OsuMap) -> bool {
-        if let Ok(file) = File::open(map.audio_path()) {
-            if let Ok(src) = rodio::Decoder::try_from(file) {
-                self.fade = None;
-                self.gain = 1.0;
-                self.apply_volume();
-                self.duration = src.total_duration();
+        if let Ok(file) = File::open(map.audio_path())
+            && let Ok(src) = rodio::Decoder::try_from(file)
+        {
+            self.fade = None;
+            self.gain = 1.0;
+            self.apply_volume();
+            self.duration = src.total_duration();
 
-                self.player.clear();
-                self.player.append(src);
-                self.player.play();
-                return true;
-            }
+            self.player.clear();
+            self.player.append(src);
+            self.player.play();
+            return true;
         }
         false
     }
@@ -101,7 +101,7 @@ impl Audio {
             return;
         }
 
-        if self.is_puased() {
+        if self.is_paused() {
             self.player.play();
             self.start_fade(1.0, AfterFade::None);
         } else {
@@ -132,7 +132,7 @@ impl Audio {
         let _ = self.player.try_seek(pos);
     }
 
-    pub fn is_puased(&self) -> bool {
+    pub fn is_paused(&self) -> bool {
         self.player.is_paused() || self.after_fade() == Some(AfterFade::Pause)
     }
 

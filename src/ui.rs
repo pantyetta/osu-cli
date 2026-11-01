@@ -23,7 +23,7 @@ const KEYMAP: &[(&str, &str)] = &[
     ("Shift + ↑", "Volume Up"),
     ("Shift + ↓", "Volume Down"),
     ("Shift + →", "Next Song"),
-    ("Shift + ←", "Prev Songwn"),
+    ("Shift + ←", "Prev Song"),
     ("→", "Seek +5s"),
     ("←", "Seek -5s"),
     ("Space", "Toggle Pause"),
@@ -33,7 +33,7 @@ const KEYMAP: &[(&str, &str)] = &[
     ("PageUp", "Scroll PageUp"),
     ("PageDown", "Scroll Pagedown"),
     ("Home", "Scroll Top"),
-    ("End", "Scroll Last "),
+    ("End", "Scroll Last"),
     ("Tab", "Switch Tabs"),
 ];
 
@@ -42,11 +42,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let show_playing = !show_search && app.playing().is_some();
 
     let show_thumbnail = frame.area().height >= 24 && !matches!(app.mode, Mode::Help);
-    let playing_height = if show_thumbnail {
-        thumbnail::ROWS + 2
-    } else {
-        4
-    };
+    let playing_height = thumbnail::ROWS + 2;
 
     let [tabs_area, main_area, search_area, playing_area] = Layout::vertical([
         Constraint::Length(1),
@@ -86,6 +82,16 @@ fn label(m: &OsuMap) -> String {
     )
 }
 
+fn song_list<'a>(items: impl IntoIterator<Item = Line<'a>>, title: String) -> List<'a> {
+    List::new(items)
+        .block(
+            Block::bordered()
+                .title(title)
+                .title_bottom(Line::from(" ?: help ").right_aligned()),
+        )
+        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+}
+
 fn draw_tabs(frame: &mut Frame, area: Rect, app: &App) {
     let tabs = Tabs::new(Tab::ALL.map(Tab::title))
         .select(app.tab as usize)
@@ -101,55 +107,43 @@ fn draw_maps(frame: &mut Frame, area: Rect, app: &mut App) {
         format!("Search: {} ({})", app.query, filtered.len())
     };
 
-    let list = List::new(filtered.iter().map(|&i| {
-        let is_playing = app.playing() == Some(i);
-        let mark = if is_playing { "♪ " } else { "  " };
-        let line = Line::from(format!("{}{}", mark, label(&app.songs[i])));
-        if is_playing {
-            line.style(Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-        } else {
-            line
-        }
-    }))
-    .block(
-        Block::bordered()
-            .title(format!(" Maps {} ", header))
-            .title_bottom(Line::from(" ?: help ").right_aligned()),
-    )
-    .highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    let playing = app.playing();
+    let list = song_list(
+        filtered.iter().map(|&i| {
+            let is_playing = playing == Some(i);
+            let mark = if is_playing { "♪ " } else { "  " };
+            let line = Line::from(format!("{}{}", mark, label(&app.songs[i])));
+            if is_playing {
+                line.style(Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            } else {
+                line
+            }
+        }),
+        format!(" Maps {} ", header),
+    );
     frame.render_stateful_widget(list, area, &mut app.map_state);
 }
 
 fn draw_queue(frame: &mut Frame, area: Rect, app: &mut App) {
     let upcoming = app.playlist.upcoming();
-    let list = List::new(
+    let list = song_list(
         upcoming
             .iter()
             .map(|&i| Line::from(format!(" {}", label(&app.songs[i])))),
-    )
-    .block(
-        Block::bordered()
-            .title(format!(" Queue ({}) ", upcoming.len()))
-            .title_bottom(Line::from(" ?: Help ").right_aligned()),
-    )
-    .highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+        format!(" Queue ({}) ", upcoming.len()),
+    );
     frame.render_stateful_widget(list, area, &mut app.queue_state);
 }
 
 fn draw_history(frame: &mut Frame, area: Rect, app: &mut App) {
     let history = app.playlist.history();
-    let list = List::new(
+    let list = song_list(
         history
             .iter()
             .rev()
             .map(|&i| Line::from(format!(" {}", label(&app.songs[i])))),
-    )
-    .block(
-        Block::bordered()
-            .title(format!(" History ({}) ", history.len()))
-            .title_bottom(Line::from(" ?: Help ").right_aligned()),
-    )
-    .highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+        format!(" History ({}) ", history.len()),
+    );
     frame.render_stateful_widget(list, area, &mut app.history_state);
 }
 
@@ -199,16 +193,13 @@ fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App, show_thumbnail: bo
     let [title_area, seek_area] =
         Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(meta_area);
 
-    frame.render_widget(
-        Paragraph::new(format!("{}", label(&app.songs[i]))),
-        title_area,
-    );
+    frame.render_widget(Paragraph::new(label(&app.songs[i])), title_area);
 
     draw_seekbar(frame, seek_area, audio.position(), audio.duration());
 
     let status = vec![
         Line::from(vec![
-            Span::raw(format!(" {}", if audio.is_puased() { "⏸" } else { "▶" })),
+            Span::raw(format!(" {}", if audio.is_paused() { "⏸" } else { "▶" })),
             Span::raw(" "),
             status_span("S", app.playlist.shuffle()),
             Span::raw(" "),

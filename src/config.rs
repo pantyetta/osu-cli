@@ -1,11 +1,12 @@
 use std::{
-    fs, io,
-    path::{Path, PathBuf},
+    fs,
+    io::{self, BufRead, Write},
+    path::{self, Path, PathBuf},
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Config {
     songs_dir: PathBuf,
 }
@@ -35,9 +36,74 @@ pub fn songs_dir(path: &Path) -> io::Result<PathBuf> {
     Ok(config.songs_dir)
 }
 
+pub fn load_or_setup() -> io::Result<PathBuf> {
+    let path = path()?;
+    match songs_dir(&path) {
+        Ok(dir) if dir.is_dir() => Ok(dir),
+        Ok(dir) => {
+            println!("Songs foler not found: {}", dir.display());
+            println!("Enter the path to your osu! Songs folder");
+            setup(&path)
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            println!("First run: enter the path to your osu! Songs folder.");
+            setup(&path)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn setup(path: &Path) -> io::Result<PathBuf> {
+    let dir = read_songs_dir(io::stdin().lock())?;
+    save(&path, &dir)?;
+    println!("saved to {}", path.display());
+    Ok(dir)
+}
+
+fn read_songs_dir(mut input: impl BufRead) -> io::Result<PathBuf> {
+    loop {
+        print!("Songs folder:");
+        io::stdout().flush()?;
+
+        let mut line = String::new();
+        if input.read_line(&mut line)? == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "no songs folder entered",
+            ));
+        }
+
+        let line = line.trim().trim_matches('"');
+        if line.is_empty() {
+            continue;
+        }
+
+        let dir = path::absolute(line)?;
+        if dir.is_dir() {
+            return Ok(dir);
+        }
+        println!("Not a folder: {}", dir.display());
+    }
+}
+
+fn save(path: &Path, songs_dir: &Path) -> io::Result<()> {
+    let config = Config {
+        songs_dir: songs_dir.to_path_buf(),
+    };
+
+    let text =
+        toml::to_string(&config).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, text)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, path::Path};
+
+    use crate::config::{read_songs_dir, save};
 
     use super::songs_dir;
 
@@ -69,5 +135,31 @@ mod tests {
         fs::remove_file(&path).unwrap();
 
         assert!(dir.is_err());
+    }
+
+    #[test]
+    fn saved_config_can_be_read_back() {
+        let root = std::env::temp_dir().join(format!("osu-cli-test-save-{}", std::process::id()));
+        let path = root.join("nested").join("config.toml");
+        save(&path, Path::new(r"D:\osu!\Songs")).unwrap();
+        let dir = songs_dir(&path);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert_eq!(dir.unwrap(), Path::new(r"D:\osu!\Songs"));
+    }
+
+    #[test]
+    fn prompt_retries_until_folder_exists() {
+        let temp = std::env::temp_dir();
+        let input = format!("\nno/such/songs\n\"{}\"\n", temp.display());
+
+        let dir = read_songs_dir(input.as_bytes()).unwrap();
+
+        assert_eq!(dir, std::path::absolute(&temp).unwrap());
+    }
+
+    #[test]
+    fn prompt_without_input_is_error() {
+        assert!(read_songs_dir(&b""[..]).is_err());
     }
 }

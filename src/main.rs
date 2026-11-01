@@ -327,7 +327,7 @@ fn main() -> std::io::Result<()> {
 
     let root = match args.iter().find(|arg| !arg.starts_with("--")) {
         Some(arg) => PathBuf::from(arg),
-        None => config::songs_dir(&config::path()?)?,
+        None => config::load_or_setup()?,
     };
     let cache_path = dirs::cache_dir()
         .unwrap_or_else(env::temp_dir)

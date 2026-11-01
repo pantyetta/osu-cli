@@ -94,7 +94,7 @@ fn draw_tabs(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_maps(frame: &mut Frame, area: Rect, app: &mut App) {
-    let filtered = app.filtered();
+    let filtered = &app.filtered;
     let header = if app.query.is_empty() {
         format!("All ({})", filtered.len())
     } else {

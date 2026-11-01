@@ -71,6 +71,7 @@ struct App {
     mode: Mode,
     tab: Tab,
     query: String,
+    filtered: Vec<usize>,
     map_state: ListState,
     queue_state: ListState,
     history_state: ListState,
@@ -84,6 +85,7 @@ struct App {
 impl App {
     fn new(songs: Vec<OsuMap>, picker: Picker) -> Self {
         Self {
+            filtered: (0..songs.len()).collect(),
             songs,
             audio: Audio::new(),
             mode: Mode::Normal,
@@ -100,14 +102,18 @@ impl App {
         }
     }
 
-    pub fn filtered(&self) -> Vec<usize> {
+    fn edit_query(&mut self, edit: impl FnOnce(&mut String)) {
+        edit(&mut self.query);
+
         let q = self.query.to_lowercase();
-        self.songs
+        self.filtered = self
+            .songs
             .iter()
             .enumerate()
             .filter(|(_, m)| m.matches(&q))
             .map(|(i, _)| i)
-            .collect()
+            .collect();
+        self.map_state.select(Some(0));
     }
 
     pub fn playing(&self) -> Option<usize> {
@@ -146,8 +152,7 @@ impl App {
                 if self.query.is_empty() {
                     return true;
                 }
-                self.query.clear();
-                self.map_state.select(Some(0));
+                self.edit_query(String::clear);
             }
 
             KeyCode::Up if shift => self.with_audio(|a| a.add_volume(0.05)),
@@ -197,18 +202,13 @@ impl App {
         match key.code {
             KeyCode::Enter => self.mode = Mode::Normal,
             KeyCode::Esc => {
-                self.query.clear();
-                self.map_state.select(Some(0));
+                self.edit_query(String::clear);
                 self.mode = Mode::Normal;
             }
-            KeyCode::Backspace => {
-                self.query.pop();
-                self.map_state.select(Some(0));
-            }
-            KeyCode::Char(c) => {
-                self.query.push(c);
-                self.map_state.select(Some(0));
-            }
+            KeyCode::Backspace => self.edit_query(|q| {
+                q.pop();
+            }),
+            KeyCode::Char(c) => self.edit_query(|q| q.push(c)),
             _ => {}
         }
     }
@@ -242,10 +242,10 @@ impl App {
             return;
         };
 
-        let mut filtered = self.filtered();
-        if sel >= filtered.len() {
+        if sel >= self.filtered.len() {
             return;
         }
+        let mut filtered = self.filtered.clone();
         filtered.rotate_left(sel);
         self.playlist.start(filtered);
         self.with_audio(|a| a.stop());

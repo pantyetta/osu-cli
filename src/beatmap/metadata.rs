@@ -1,5 +1,3 @@
-
-
 #[derive(Debug)]
 pub struct OsuMapMetadata {
     pub title: String,

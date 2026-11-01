@@ -1,12 +1,17 @@
-use std::{error::Error, fs::File, io::Read, path::{Path, PathBuf}};
+use std::{
+    error::Error,
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
+mod events;
 mod general;
 mod metadata;
-mod events;
 
+use events::OsuMapEvents;
 use general::OsuMapGeneral;
 use metadata::OsuMapMetadata;
-use events::OsuMapEvents;
 
 #[derive(Debug)]
 pub struct OsuMap {
@@ -83,7 +88,7 @@ impl OsuMap {
 mod tests {
     use std::path::{Path, PathBuf};
 
-use crate::beatmap::OsuMap;
+    use crate::beatmap::OsuMap;
 
     const SAMPLE: &str = "osu file format v14\r\n\r\n\
         [General]\r\nAudioFilename: audio.mp3\r\n\r\n\

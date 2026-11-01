@@ -481,10 +481,12 @@ fn main() -> std::io::Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("./songs"));
 
+    let songs = load(&root)?;
+
     let terminal = ratatui::init();
     let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
 
-    let mut app = App::new(load(&root), picker);
+    let mut app = App::new(songs, picker);
 
     let result = run(terminal, &mut app);
     ratatui::restore();

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dirs = "7.0.0"
 fastrand = "2.5.0"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 indicatif = { version = "0.18.6", features = ["rayon"] }
@@ -11,6 +12,8 @@ ratatui = "0.30.2"
 ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
 rayon = "1.12.0"
 rodio = "0.23.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"

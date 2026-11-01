@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs::File,
-    io::Read,
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
 };
 
@@ -12,8 +12,9 @@ mod metadata;
 use events::OsuMapEvents;
 use general::OsuMapGeneral;
 use metadata::OsuMapMetadata;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OsuMap {
     dir: PathBuf,
     pub general: OsuMapGeneral,
@@ -42,10 +43,6 @@ impl OsuMap {
     }
 
     pub fn from_file(path: &Path) -> Result<OsuMap, Box<dyn Error>> {
-        if path.is_dir() || path.is_empty() {
-            return Err(format!("{} is not files.", path.display()).into());
-        }
-
         let is_mapfile = path
             .extension()
             .and_then(|ext| ext.to_str())
@@ -55,9 +52,24 @@ impl OsuMap {
             return Err(format!("{} is not osu files.", path.display()).into());
         }
 
-        let mut file = File::open(path)?;
+        let mut reader = BufReader::new(File::open(path)?);
         let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
+        let mut in_events = false;
+
+        loop {
+            let start = contents.len();
+            if reader.read_line(&mut contents)? == 0 {
+                break;
+            }
+
+            let line = contents[start..].trim_end();
+            if in_events && line.starts_with('[') {
+                contents.truncate(start);
+                break;
+            }
+
+            in_events |= line == "[Events]";
+        }
 
         let dir = path
             .parent()

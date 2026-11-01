@@ -1,4 +1,6 @@
-#[derive(Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OsuMapMetadata {
     pub title: String,
     pub title_unicode: Option<String>,

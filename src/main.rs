@@ -321,13 +321,19 @@ impl App {
 }
 
 fn main() -> std::io::Result<()> {
-    let root = env::args()
-        .nth(1)
+    let args: Vec<String> = env::args().skip(1).collect();
+    let rescan = args.iter().any(|arg| arg == "--rescan");
+    let root = args
+        .iter()
+        .find(|arg| !arg.starts_with("--"))
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("./songs"));
+    let cache_path = dirs::cache_dir()
+        .unwrap_or_else(env::temp_dir)
+        .join("osu-cli")
+        .join("library.json");
 
-    let songs = load(&root)?;
-
+    let songs = load(&root, &cache_path, rescan)?;
     let terminal = ratatui::init();
     let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
 

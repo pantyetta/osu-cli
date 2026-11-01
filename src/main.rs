@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     env::{self},
     path::PathBuf,
     time::Duration,
@@ -19,15 +18,15 @@ use ratatui_image::picker::Picker;
 use crate::{library::load, thumbnail::Thumbnail};
 use audio::Audio;
 use beatmap::OsuMap;
+use playlist::{Playlist, Step};
 
 mod audio;
 mod beatmap;
 mod library;
+mod playlist;
 mod thumbnail;
 mod ui;
 
-const HISTORY_LIMIT: usize = 1_000;
-const QUEUE_LIMIT: usize = 1_000;
 const RESTART_THRESHOLD: Duration = Duration::from_secs(3);
 const SEEK_STEP: Duration = Duration::from_secs(5);
 
@@ -43,13 +42,6 @@ enum Tab {
     Maps,
     Queue,
     History,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Step {
-    Next,
-    Prev,
-    Current,
 }
 
 impl Tab {
@@ -84,13 +76,7 @@ struct App {
     history_state: ListState,
     page_height: u16,
 
-    original_queue: Vec<usize>,
-    queue: Vec<usize>,
-    history: VecDeque<usize>,
-    pos: Option<usize>,
-    step: Step,
-    shuffle: bool,
-    repeat: bool,
+    playlist: Playlist,
 
     thumbnail: Thumbnail,
 }
@@ -108,13 +94,7 @@ impl App {
             history_state: ListState::default().with_selected(Some(0)),
             page_height: 0,
 
-            original_queue: Vec::new(),
-            queue: Vec::new(),
-            history: VecDeque::with_capacity(HISTORY_LIMIT),
-            pos: None,
-            step: Step::Next,
-            shuffle: false,
-            repeat: false,
+            playlist: Playlist::new(),
 
             thumbnail: Thumbnail::new(picker),
         }
@@ -135,7 +115,7 @@ impl App {
             return None;
         }
 
-        self.pos.and_then(|p| self.queue.get(p)).copied()
+        self.playlist.current()
     }
 
     pub fn tick(&mut self) {
@@ -145,81 +125,8 @@ impl App {
             return;
         };
 
-        let mut target = match self.step {
-            Step::Next => self.next_cursor(),
-            Step::Prev => self.pos.and_then(|p| p.checked_sub(1)),
-            Step::Current => self.pos,
-        };
-
-        self.step = Step::Next;
-
-        for _ in 0..=self.original_queue.len() {
-            let Some(pos) = target else { break };
-            if self.play_at(pos) {
-                break;
-            }
-            self.pos = Some(pos);
-            target = self.next_cursor();
-        }
-    }
-
-    fn next_cursor(&mut self) -> Option<usize> {
-        let mut next = self.upcoming_start();
-        if next < self.queue.len() {
-            return Some(next);
-        }
-
-        if !self.repeat || self.original_queue.is_empty() {
-            return None;
-        }
-
-        let mut lap = self.original_queue.clone();
-
-        if self.shuffle {
-            fastrand::shuffle(&mut lap);
-
-            if lap.len() > 1 && lap.first() == self.queue.last() {
-                let i = fastrand::usize(1..lap.len());
-                lap.swap(0, i);
-            }
-        }
-
-        self.queue.extend(lap);
-
-        if self.queue.len() > QUEUE_LIMIT {
-            let cut = (self.queue.len() - QUEUE_LIMIT).min(self.pos.unwrap_or(0));
-            self.queue.drain(..cut);
-            next -= cut;
-            self.pos = self.pos.map(|c| c - cut);
-        }
-        Some(next)
-    }
-
-    pub fn upcoming_start(&self) -> usize {
-        self.pos.map_or(0, |p| p + 1).min(self.queue.len())
-    }
-
-    fn play_at(&mut self, pos: usize) -> bool {
-        let Some(&next) = self.queue.get(pos) else {
-            return false;
-        };
-
-        let Some(audio) = &mut self.audio else {
-            return false;
-        };
-
-        if !audio.play(&self.songs[next]) {
-            return false;
-        }
-
-        if self.history.back() != Some(&next) {
-            if self.history.len() >= HISTORY_LIMIT {
-                self.history.pop_front();
-            }
-            self.history.push_back(next);
-        }
-        self.pos = Some(pos);
-        true
+        let songs = &self.songs;
+        self.playlist.advance(|song| audio.play(&songs[song]));
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> bool {
@@ -254,7 +161,7 @@ impl App {
             KeyCode::BackTab => self.tab = self.tab.prev(),
             KeyCode::Tab => self.tab = self.tab.next(),
 
-            KeyCode::Char('r') => self.repeat = !self.repeat,
+            KeyCode::Char('r') => self.playlist.toggle_repeat(),
             KeyCode::Char('s') => self.toggle_shuffle(),
             KeyCode::Char('k') | KeyCode::Up => self.active_state().select_previous(),
             KeyCode::Char('j') | KeyCode::Down => self.active_state().select_next(),
@@ -340,23 +247,8 @@ impl App {
             return;
         }
         filtered.rotate_left(sel);
-        self.original_queue = filtered;
-
-        self.queue.truncate(self.upcoming_start());
-
-        let mut ctx = self.original_queue.clone();
-        if self.shuffle {
-            fastrand::shuffle(&mut ctx[1..]);
-        }
-
-        if self.queue.last() == ctx.first() {
-            self.queue.extend_from_slice(&ctx[1..]);
-            self.step = Step::Current;
-            self.with_audio(|a| a.stop());
-        } else {
-            self.queue.extend(ctx);
-            self.play_next();
-        }
+        self.playlist.start(filtered);
+        self.with_audio(|a| a.stop());
     }
 
     fn jump_in_queue(&mut self) {
@@ -368,9 +260,7 @@ impl App {
             return;
         };
 
-        let start = self.upcoming_start();
-        if start + sel < self.queue.len() {
-            self.queue.drain(start..start + sel);
+        if self.playlist.skip_upcoming(sel) {
             self.queue_state.select(Some(0));
             self.play_next();
         }
@@ -381,7 +271,7 @@ impl App {
             return;
         }
 
-        self.step = Step::Next;
+        self.playlist.set_step(Step::Next);
         self.with_audio(|a| a.stop());
     }
 
@@ -392,17 +282,16 @@ impl App {
 
         let Some(audio) = &mut self.audio else { return };
         if audio.is_empty() {
-            self.step = Step::Current;
+            self.playlist.set_step(Step::Current);
             return;
         }
 
-        let at_first = !self.pos.is_some_and(|p| p > 0);
-        if at_first || audio.position() > RESTART_THRESHOLD {
+        if !self.playlist.has_prev() || audio.position() > RESTART_THRESHOLD {
             audio.seek(Duration::ZERO);
             return;
         }
 
-        self.step = Step::Prev;
+        self.playlist.set_step(Step::Prev);
         audio.stop();
     }
 
@@ -415,25 +304,7 @@ impl App {
             return;
         }
 
-        self.shuffle = !self.shuffle;
-        let rest = self.rest_of_original();
-        self.queue.truncate(self.upcoming_start());
-        self.queue.extend(rest);
-    }
-
-    fn rest_of_original(&self) -> Vec<usize> {
-        let k = self
-            .pos
-            .and_then(|p| self.queue.get(p))
-            .and_then(|song| self.original_queue.iter().position(|i| i == song))
-            .map_or(0, |k| k + 1);
-
-        let mut rest = self.original_queue[k..].to_vec();
-        if self.shuffle {
-            fastrand::shuffle(&mut rest);
-        }
-
-        rest
+        self.playlist.toggle_shuffle();
     }
 
     fn volume(&self) -> String {

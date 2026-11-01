@@ -121,7 +121,7 @@ fn draw_maps(frame: &mut Frame, area: Rect, app: &mut App) {
 }
 
 fn draw_queue(frame: &mut Frame, area: Rect, app: &mut App) {
-    let upcoming = &app.queue[app.upcoming_start()..];
+    let upcoming = app.playlist.upcoming();
     let list = List::new(
         upcoming
             .iter()
@@ -137,15 +137,16 @@ fn draw_queue(frame: &mut Frame, area: Rect, app: &mut App) {
 }
 
 fn draw_history(frame: &mut Frame, area: Rect, app: &mut App) {
+    let history = app.playlist.history();
     let list = List::new(
-        app.history
+        history
             .iter()
             .rev()
             .map(|&i| Line::from(format!(" {}", label(&app.songs[i])))),
     )
     .block(
         Block::bordered()
-            .title(format!(" History ({}) ", app.history.len()))
+            .title(format!(" History ({}) ", history.len()))
             .title_bottom(Line::from(" ?: Help ").right_aligned()),
     )
     .highlight_style(Style::new().add_modifier(Modifier::REVERSED));
@@ -209,9 +210,9 @@ fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App, show_thumbnail: bo
         Line::from(vec![
             Span::raw(format!(" {}", if audio.is_puased() { "⏸" } else { "▶" })),
             Span::raw(" "),
-            status_span("S", app.shuffle),
+            status_span("S", app.playlist.shuffle()),
             Span::raw(" "),
-            status_span("R", app.repeat),
+            status_span("R", app.playlist.repeat()),
         ]),
         Line::from(vec![Span::raw(format!(" v:{}%", app.volume()))]),
     ];

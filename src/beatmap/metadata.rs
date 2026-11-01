@@ -26,14 +26,11 @@ impl OsuMapMetadata {
 
             match key {
                 "Title" => title = value.trim().to_string(),
-                "TitleUnicode" => title_unicode = Some(value.trim().to_string()),
+                "TitleUnicode" => title_unicode = non_empty(value),
                 "Artist" => artist = value.trim().to_string(),
-                "ArtistUnicode" => artist_unicode = Some(value.trim().to_string()),
+                "ArtistUnicode" => artist_unicode = non_empty(value),
                 "Creator" => creator = value.trim().to_string(),
-                "Tags" => {
-                    tags = value.trim().split_whitespace().map(String::from).collect();
-                    break;
-                }
+                "Tags" => tags = value.split_whitespace().map(String::from).collect(),
                 _ => continue,
             }
         }
@@ -55,4 +52,9 @@ impl OsuMapMetadata {
     pub fn display_artist(&self) -> &str {
         self.artist_unicode.as_deref().unwrap_or(&self.artist)
     }
+}
+
+fn non_empty(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
 }

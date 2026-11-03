@@ -1,14 +1,9 @@
 use std::time::Duration;
 
 use ratatui::{
-    Frame,
-    layout::{
-        Constraint::{self},
-        Layout, Rect,
-    },
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Clear, LineGauge, List, Padding, Paragraph, Row, Table, Tabs},
+    Frame, layout::{
+        Constraint::{self}, Layout, Margin, Rect,
+    }, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Clear, LineGauge, List, Padding, Paragraph, Row, Table, Tabs},
 };
 use ratatui_image::Image;
 
@@ -40,8 +35,6 @@ const KEYMAP: &[(&str, &str)] = &[
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let show_search = matches!(app.mode, Mode::Search);
     let show_playing = !show_search && app.playing().is_some();
-
-    let show_thumbnail = frame.area().height >= 24 && !matches!(app.mode, Mode::Help);
     let playing_height = thumbnail::ROWS + 2;
 
     let [tabs_area, main_area, search_area, playing_area] = Layout::vertical([
@@ -66,11 +59,15 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
 
     if show_playing {
-        draw_now_playing(frame, playing_area, app, show_thumbnail);
+        draw_now_playing(frame, playing_area, app);
     }
 
     if matches!(app.mode, Mode::Help) {
         draw_help(frame);
+    }
+
+    if matches!(app.mode, Mode::ConfirmQuit) {
+        draw_confirm_quit(frame);
     }
 }
 
@@ -163,7 +160,7 @@ fn status_span(name: &str, on: bool) -> Span<'_> {
     Span::styled(name, style)
 }
 
-fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App, show_thumbnail: bool) {
+fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App) {
     let Some(i) = app.playing() else { return };
     let Some(audio) = &app.audio else { return };
 
@@ -174,21 +171,14 @@ fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App, show_thumbnail: bo
     let song_inner = song_block.inner(song_area);
     frame.render_widget(song_block, song_area);
 
-    let thumb_width = if show_thumbnail {
-        app.thumbnail.cols() + 1
-    } else {
-        0
-    };
     let [_, thumb_area, meta_area] = Layout::horizontal([
         Constraint::Length(1),
-        Constraint::Length(thumb_width),
+        Constraint::Length(app.thumbnail.cols() + 1),
         Constraint::Fill(1),
     ])
     .areas(song_inner);
 
-    if show_thumbnail {
-        draw_thumbnail(frame, thumb_area, app);
-    }
+    draw_thumbnail(frame, thumb_area, app);
 
     let [title_area, seek_area] =
         Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(meta_area);
@@ -226,7 +216,7 @@ fn draw_help(frame: &mut Frame) {
         Constraint::Length(40),
         Constraint::Length(KEYMAP.len() as u16 + 4),
     );
-    frame.render_widget(Clear, popup);
+    clear_popup(frame, popup);
     frame.render_widget(table, popup);
 }
 
@@ -261,4 +251,21 @@ fn draw_seekbar(frame: &mut Frame, area: Rect, position: Duration, duration: Opt
         .filled_style(Style::new().fg(Color::Cyan))
         .unfilled_style(Style::new().fg(Color::DarkGray));
     frame.render_widget(gauge, bar_area);
+}
+
+fn draw_confirm_quit(frame: &mut Frame) {
+    let text = Paragraph::new("Quit osu-cli?").centered().block(
+        Block::bordered()
+            .title(" Quit ")
+            .title_bottom(Line::from(" y / Enter: quit  n / q / Esc: cancel ").centered())
+            .padding(Padding::symmetric(2, 1)),
+    );
+    let popup = frame.area().centered(Constraint::Length(40), Constraint::Length(5));
+    clear_popup(frame, popup);
+    frame.render_widget(text, popup);
+}
+
+fn clear_popup(frame: &mut Frame, popup: Rect) {
+    let area = popup.outer(Margin::new(1, 0)).intersection(frame.area());
+    frame.render_widget(Clear, area);
 }

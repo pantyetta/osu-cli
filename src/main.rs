@@ -36,6 +36,7 @@ enum Mode {
     Normal,
     Search,
     Help,
+    ConfirmQuit,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -138,20 +139,22 @@ impl App {
 
     fn handle_key(&mut self, key: KeyEvent) -> bool {
         match self.mode {
-            Mode::Normal => return self.handle_normal(key),
+            Mode::Normal => self.handle_normal(key),
             Mode::Search => self.handle_search(key),
             Mode::Help => self.handle_help(key),
+            Mode::ConfirmQuit => return self.handle_confirm_quit(key),
         }
         false
     }
 
-    fn handle_normal(&mut self, key: KeyEvent) -> bool {
+    fn handle_normal(&mut self, key: KeyEvent) {
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
 
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 if self.query.is_empty() {
-                    return true;
+                    self.mode = Mode::ConfirmQuit;
+                    return;
                 }
                 self.edit_query(String::clear);
             }
@@ -196,7 +199,6 @@ impl App {
             KeyCode::Char(' ') => self.with_audio(|a| a.toggle_pause()),
             _ => {}
         }
-        false
     }
 
     fn handle_search(&mut self, key: KeyEvent) {
@@ -218,6 +220,15 @@ impl App {
         if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
             self.mode = Mode::Normal;
         }
+    }
+
+    fn handle_confirm_quit(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Enter => return true,
+            KeyCode::Char('n') | KeyCode::Char('q') | KeyCode::Esc => self.mode = Mode::Normal,
+            _ => {}
+        }
+        false
     }
 
     fn active_state(&mut self) -> &mut ListState {

@@ -365,7 +365,7 @@ fn run(mut terminal: DefaultTerminal, app: &mut App) -> std::io::Result<()> {
         let timeout = if app.is_fading() {
             Duration::from_millis(15)
         } else {
-            Duration::from_millis(150)
+            Duration::from_millis(500)
         };
 
         if !event::poll(timeout)? {

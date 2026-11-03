@@ -1,9 +1,14 @@
 use std::time::Duration;
 
 use ratatui::{
-    Frame, layout::{
-        Constraint::{self}, Layout, Margin, Rect,
-    }, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Clear, LineGauge, List, Padding, Paragraph, Row, Table, Tabs},
+    Frame,
+    layout::{
+        Constraint::{self},
+        Layout, Margin, Rect,
+    },
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Clear, LineGauge, List, Padding, Paragraph, Row, Table, Tabs},
 };
 use ratatui_image::Image;
 
@@ -108,8 +113,7 @@ fn draw_maps(frame: &mut Frame, area: Rect, app: &mut App) {
     let list = song_list(
         filtered.iter().map(|&i| {
             let is_playing = playing == Some(i);
-            let mark = if is_playing { "♪ " } else { "  " };
-            let line = Line::from(format!("{}{}", mark, label(&app.songs[i])));
+            let line = Line::from(format!(" {}", label(&app.songs[i])));
             if is_playing {
                 line.style(Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD))
             } else {
@@ -189,7 +193,7 @@ fn draw_now_playing(frame: &mut Frame, area: Rect, app: &App) {
 
     let status = vec![
         Line::from(vec![
-            Span::raw(format!(" {}", if audio.is_paused() { "⏸" } else { "▶" })),
+            Span::raw(format!(" {}", if audio.is_paused() { "|" } else { "▶" })),
             Span::raw(" "),
             status_span("S", app.playlist.shuffle()),
             Span::raw(" "),
@@ -257,10 +261,12 @@ fn draw_confirm_quit(frame: &mut Frame) {
     let text = Paragraph::new("Quit osu-cli?").centered().block(
         Block::bordered()
             .title(" Quit ")
-            .title_bottom(Line::from(" y / Enter: quit  n / q / Esc: cancel ").centered())
+            .title_bottom(Line::from(" Enter: quit  / Esc: cancel ").right_aligned())
             .padding(Padding::symmetric(2, 1)),
     );
-    let popup = frame.area().centered(Constraint::Length(40), Constraint::Length(5));
+    let popup = frame
+        .area()
+        .centered(Constraint::Length(40), Constraint::Length(5));
     clear_popup(frame, popup);
     frame.render_widget(text, popup);
 }

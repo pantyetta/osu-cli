@@ -19,6 +19,14 @@ struct CachedDir {
 
 type Cache = BTreeMap<PathBuf, CachedDir>;
 
+#[derive(Serialize, Deserialize)]
+struct CacheFile<T> {
+    version: u32,
+    dirs: T,
+}
+
+const CACHE_VERSION: u32 = 1;
+
 pub fn load(root: &Path, cache_path: &Path, rescan: bool) -> io::Result<Vec<OsuMap>> {
     let root = path::absolute(root)?;
     let mut old = read_cache(cache_path);
@@ -81,13 +89,19 @@ pub fn load(root: &Path, cache_path: &Path, rescan: bool) -> io::Result<Vec<OsuM
 fn read_cache(path: &Path) -> Cache {
     fs::read(path)
         .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .and_then(|bytes| serde_json::from_slice::<CacheFile<Cache>>(&bytes).ok())
+        .filter(|file| file.version == CACHE_VERSION)
+        .map(|file| file.dirs)
         .unwrap_or_default()
 }
 
-fn write_cache(path: &Path, cache: &impl Serialize) {
+fn write_cache(path: &Path, dirs: &impl Serialize) {
     let Some(parent) = path.parent() else { return };
-    let Ok(bytes) = serde_json::to_vec(cache) else {
+    let file = CacheFile {
+        version: CACHE_VERSION,
+        dirs,
+    };
+    let Ok(bytes) = serde_json::to_vec(&file) else {
         return;
     };
     let tmp = path.with_extension("tmp");
@@ -123,8 +137,8 @@ fn load_maps_in_dir(dir: &Path) -> Vec<OsuMap> {
 #[cfg(test)]
 mod tests {
     use std::{fs, path::Path};
-
-    use super::load;
+    
+    use super::{load, read_cache, write_cache, Cache, CACHE_VERSION};
 
     const MAP: &str = "osu file format v14\r\n\r\n\
         [General]\r\nAudioFilename: audio.mp3\r\n\r\n\
@@ -152,5 +166,23 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
 
         assert_eq!(maps.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn cache_with_other_version_is_discarded() {
+        let path = std::env::temp_dir()
+            .join(format!("osu-cli-test-cache-{}.json", std::process::id()));
+
+        write_cache(&path, &Cache::new());
+        let bytes = fs::read(&path).unwrap();
+        let mut json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["version"], CACHE_VERSION);
+
+        json["version"] = (CACHE_VERSION + 1).into();
+        fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
+        let cache = read_cache(&path);
+        fs::remove_file(&path).unwrap();
+
+        assert!(cache.is_empty());
     }
 }

@@ -1,7 +1,7 @@
+use md5::{Digest, Md5};
 use std::{
     error::Error,
-    fs::File,
-    io::{BufRead, BufReader},
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OsuMap {
     dir: PathBuf,
+    pub hashes: Vec<[u8; 16]>,
     pub general: OsuMapGeneral,
     pub metadata: OsuMapMetadata,
     pub events: OsuMapEvents,
@@ -36,6 +37,7 @@ impl OsuMap {
 
         Ok(Self {
             dir,
+            hashes: Vec::new(),
             general: OsuMapGeneral::new(sections("General")?)?,
             metadata: OsuMapMetadata::new(sections("Metadata")?),
             events: OsuMapEvents::new(sections("Events")?),
@@ -52,31 +54,17 @@ impl OsuMap {
             return Err(format!("{} is not osu files.", path.display()).into());
         }
 
-        let mut reader = BufReader::new(File::open(path)?);
-        let mut contents = String::new();
-        let mut in_events = false;
-
-        loop {
-            let start = contents.len();
-            if reader.read_line(&mut contents)? == 0 {
-                break;
-            }
-
-            let line = contents[start..].trim_end();
-            if in_events && line.starts_with('[') {
-                contents.truncate(start);
-                break;
-            }
-
-            in_events |= line == "[Events]";
-        }
+        let bytes = fs::read(path)?;
+        let text = std::str::from_utf8(&bytes)?;
 
         let dir = path
             .parent()
             .ok_or_else(|| format!("{} has no parent dir.", path.display()))?
             .to_path_buf();
 
-        Self::new(&contents, dir)
+        let mut map = Self::new(text, dir)?;
+        map.hashes.push(Md5::digest(&bytes).into());
+        Ok(map)
     }
 
     pub fn audio_path(&self) -> PathBuf {

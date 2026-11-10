@@ -25,7 +25,7 @@ struct CacheFile<T> {
     dirs: T,
 }
 
-const CACHE_VERSION: u32 = 1;
+const CACHE_VERSION: u32 = 2;
 
 pub fn load(root: &Path, cache_path: &Path, rescan: bool) -> io::Result<Vec<OsuMap>> {
     let root = path::absolute(root)?;
@@ -122,12 +122,19 @@ fn load_maps_in_dir(dir: &Path) -> Vec<OsuMap> {
 
     for file in files {
         if let Ok(map) = OsuMap::from_file(&file) {
-            let is_dup = maps.iter().any(|m| {
+            let existing = maps.iter_mut().find(|m| {
                 m.metadata.title == map.metadata.title
                     && m.general.audio_filename == map.general.audio_filename
             });
-            if !is_dup {
-                maps.push(map);
+            match existing {
+                Some(existing) => {
+                    for hash in map.hashes {
+                        if !existing.hashes.contains(&hash) {
+                            existing.hashes.push(hash);
+                        }
+                    }
+                }
+                None => maps.push(map),
             }
         }
     }
@@ -137,8 +144,8 @@ fn load_maps_in_dir(dir: &Path) -> Vec<OsuMap> {
 #[cfg(test)]
 mod tests {
     use std::{fs, path::Path};
-    
-    use super::{load, read_cache, write_cache, Cache, CACHE_VERSION};
+
+    use super::{CACHE_VERSION, Cache, load, read_cache, write_cache};
 
     const MAP: &str = "osu file format v14\r\n\r\n\
         [General]\r\nAudioFilename: audio.mp3\r\n\r\n\
@@ -170,8 +177,8 @@ mod tests {
 
     #[test]
     fn cache_with_other_version_is_discarded() {
-        let path = std::env::temp_dir()
-            .join(format!("osu-cli-test-cache-{}.json", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("osu-cli-test-cache-{}.json", std::process::id()));
 
         write_cache(&path, &Cache::new());
         let bytes = fs::read(&path).unwrap();
@@ -184,5 +191,21 @@ mod tests {
         fs::remove_file(&path).unwrap();
 
         assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn merges_difficulty_hashes() {
+        let root = std::env::temp_dir().join(format!("osu-cli-test-hash-{}", std::process::id()));
+        let dir = root.join("song");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("easy.osu"), MAP).unwrap();
+        fs::write(dir.join("hard.osu"), format!("{MAP}// hard\r\n")).unwrap();
+
+        let maps = load(&root, &root.join("library.json"), false);
+        fs::remove_dir_all(&root).unwrap();
+
+        let maps = maps.unwrap();
+        assert_eq!(maps.len(), 1);
+        assert_eq!(maps[0].hashes.len(), 2);
     }
 }

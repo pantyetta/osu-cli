@@ -8,6 +8,7 @@ dirs = "7.0.0"
 fastrand = "2.5.0"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 indicatif = { version = "0.18.6", features = ["rayon"] }
+md-5 = "0.11.0"
 ratatui = "0.30.2"
 ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
 rayon = "1.12.0"
